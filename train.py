@@ -3,7 +3,7 @@ import logging
 import argparse
 from pathlib import Path
 import numpy as np
-from keras.callbacks import LearningRateScheduler, ModelCheckpoint
+from keras.callbacks import ReduceLROnPlateau, ModelCheckpoint
 from keras.optimizers import SGD, Adam
 from keras.utils import np_utils
 from wide_resnet import WideResNet
@@ -22,9 +22,9 @@ def get_args():
                         help="path to input database mat file")
     parser.add_argument("--batch_size", type=int, default=32,
                         help="batch size")
-    parser.add_argument("--nb_epochs", type=int, default=30,
+    parser.add_argument("--nb_epochs", type=int, default=100,
                         help="number of epochs")
-    parser.add_argument("--lr", type=float, default=0.1,
+    parser.add_argument("--lr", type=float, default=0.001,
                         help="initial learning rate")
     parser.add_argument("--opt", type=str, default="sgd",
                         help="optimizer name; 'sgd' or 'adam'")
@@ -65,6 +65,13 @@ def get_optimizer(opt_name, lr):
     else:
         raise ValueError("optimizer name should be 'sgd' or 'adam'")
 
+def normalize(image):
+    image = image / 255.
+    image = image - 0.5
+    image = image * 2.
+
+    return image
+
 
 def main():
     args = get_args()
@@ -83,19 +90,18 @@ def main():
     logging.debug("Loading data...")
     image, gender, age, _, image_size, _ = load_data(input_path)
     X_data = image
+    print(np.max(X_data)
     y_data_g = np_utils.to_categorical(gender, 2)
-    y_data_a = np_utils.to_categorical(age, 101)
-
+    y_data_a = age/np.max(age) #np_utils.to_categorical(age, 101)
     model = WideResNet(image_size, depth=depth, k=k)()
     opt = get_optimizer(opt_name, lr)
-    model.compile(optimizer=opt, loss=["categorical_crossentropy", "categorical_crossentropy"],
-                  metrics=['accuracy'])
+    model.compile(optimizer=opt, loss={'pred_age': 'mse', 'pred_gender': 'categorical_crossentropy'}, metrics={'pred_age': 'mae', 'pred_gender': 'accuracy'}, loss_weights={'pred_age': 10, 'pred_gender': 1})
 
     logging.debug("Model summary...")
     model.count_params()
     model.summary()
 
-    callbacks = [LearningRateScheduler(schedule=Schedule(nb_epochs, lr)),
+    callbacks = [ReduceLROnPlateau(min_delta=0.000001),
                  ModelCheckpoint(str(output_path) + "/weights.{epoch:02d}-{val_loss:.2f}.hdf5",
                                  monitor="val_loss",
                                  verbose=1,

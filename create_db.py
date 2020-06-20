@@ -36,7 +36,7 @@ def main():
     out_genders = []
     out_ages = []
     sample_num = len(face_score)
-    out_imgs = np.empty((sample_num, img_size, img_size, 3), dtype=np.uint8)
+    out_imgs = np.memmap('filename.myarray', dtype=np.uint8, mode='w+', shape=(sample_num, img_size, img_size, 3))
     valid_sample_num = 0
 
     for i in tqdm(range(sample_num)):
