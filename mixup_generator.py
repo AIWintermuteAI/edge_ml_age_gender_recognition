@@ -1,6 +1,6 @@
 import numpy as np
-
-
+import cv2
+import os 
 class MixupGenerator():
     def __init__(self, X_train, y_train, batch_size=32, alpha=0.2, shuffle=True, datagen=None):
         self.X_train = X_train
@@ -31,30 +31,25 @@ class MixupGenerator():
         return indexes
 
     def __data_generation(self, batch_ids):
-        _, h, w, c = self.X_train.shape
-        l = np.random.beta(self.alpha, self.alpha, self.batch_size)
-        X_l = l.reshape(self.batch_size, 1, 1, 1)
-        y_l = l.reshape(self.batch_size, 1)
-
-        X1 = self.X_train[batch_ids[:self.batch_size]]
-        X2 = self.X_train[batch_ids[self.batch_size:]]
-        X = X1 * X_l + X2 * (1 - X_l)
-
-        if self.datagen:
-            for i in range(self.batch_size):
-                X[i] = self.datagen.random_transform(X[i])
-                X[i] = self.datagen.standardize(X[i])
-
-        if isinstance(self.y_train, list):
-            y = []
-
-            for y_train_ in self.y_train:
-                y1 = y_train_[batch_ids[:self.batch_size]]
-                y2 = y_train_[batch_ids[self.batch_size:]]
-                y.append(y1 * y_l + y2 * (1 - y_l))
-        else:
-            y1 = self.y_train[batch_ids[:self.batch_size]]
-            y2 = self.y_train[batch_ids[self.batch_size:]]
-            y = y1 * y_l + y2 * (1 - y_l)
-
-        return X, y
+        X = []
+        y_gender_list = []
+        y_age_list = []
+        for i in range(self.batch_size):
+            img = cv2.imread(os.path.join("data", "imdb_crop", self.X_train[batch_ids[i]][0][0]), 1)
+            img = cv2.resize(img, (64, 64))
+            img = img.astype(np.float32)
+            img = img / 255.
+            img = img - 0.5
+            img = img * 2.
+            img = img[:, :, ::-1]
+            if self.datagen:
+                img = self.datagen.random_transform(img)
+                img = self.datagen.standardize(img)
+            X.append(img)
+            
+            y_gender = self.y_train[0][batch_ids[i]]
+            y_age = self.y_train[1][batch_ids[i]]
+            y_gender_list.append(y_gender)
+            y_age_list.append(y_age)
+        
+        return np.array(X), [y_gender_list, y_age_list]

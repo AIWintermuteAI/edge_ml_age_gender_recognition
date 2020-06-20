@@ -17,7 +17,7 @@ sys.setrecursionlimit(2 ** 20)
 np.random.seed(2 ** 10)
 
 
-class WideResNet:
+class _MobileNet:
     def __init__(self, image_size, depth=16, k=8):
         self._depth = depth
         self._k = k
@@ -44,7 +44,7 @@ class WideResNet:
         return model
 
 def main():
-    model = WideResNet(128)()
+    model = MobileNet(64)()
     model.summary()
 
 

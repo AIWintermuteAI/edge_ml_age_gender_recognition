@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import scipy.io
 import argparse
+import os
 from tqdm import tqdm
 from utils import get_meta
 
@@ -36,7 +37,7 @@ def main():
     out_genders = []
     out_ages = []
     sample_num = len(face_score)
-    out_imgs = np.memmap('filename.myarray', dtype=np.uint8, mode='w+', shape=(sample_num, img_size, img_size, 3))
+    out_imgs = np.memmap('filename.myarray', dtype='object', mode='w+', shape=(sample_num, 1))
     valid_sample_num = 0
 
     for i in tqdm(range(sample_num)):
@@ -54,8 +55,8 @@ def main():
 
         out_genders.append(int(gender[i]))
         out_ages.append(age[i])
-        img = cv2.imread(root_path + str(full_path[i][0]))
-        out_imgs[valid_sample_num] = cv2.resize(img, (img_size, img_size))
+        out_imgs[valid_sample_num] = os.path.join("data/{}_crop/".format(db),full_path[i])
+        print(out_imgs[valid_sample_num])
         valid_sample_num += 1
 
     output = {"image": out_imgs[:valid_sample_num], "gender": np.array(out_genders), "age": np.array(out_ages),

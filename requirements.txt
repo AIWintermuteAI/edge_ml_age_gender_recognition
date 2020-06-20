@@ -2,11 +2,6 @@ opencv-python
 cmake
 dlib
 imutils
-tensorflow
-Keras
-scipy
-numpy
 Pandas
 tqdm
-h5py
 tables

@@ -6,14 +6,19 @@ import numpy as np
 from keras.callbacks import ReduceLROnPlateau, ModelCheckpoint
 from keras.optimizers import SGD, Adam
 from keras.utils import np_utils
-from wide_resnet import WideResNet
+from mobilenet import _MobileNet
 from utils import load_data
 from keras.preprocessing.image import ImageDataGenerator
 from mixup_generator import MixupGenerator
 from random_eraser import get_random_eraser
-
+import tensorflow as tf
 logging.basicConfig(level=logging.DEBUG)
 
+
+gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
+config = tf.ConfigProto(gpu_options=gpu_options)
+config.gpu_options.allow_growth = True
+session = tf.Session(config=config)
 
 def get_args():
     parser = argparse.ArgumentParser(description="This script trains the CNN model for age and gender estimation.",
@@ -88,12 +93,10 @@ def main():
     output_path.mkdir(parents=True, exist_ok=True)
 
     logging.debug("Loading data...")
-    image, gender, age, _, image_size, _ = load_data(input_path)
-    X_data = image
-    print(np.max(X_data)
+    image_list, gender, age, _, image_size, _ = load_data(input_path)
     y_data_g = np_utils.to_categorical(gender, 2)
     y_data_a = age/np.max(age) #np_utils.to_categorical(age, 101)
-    model = WideResNet(image_size, depth=depth, k=k)()
+    model = _MobileNet(image_size, depth=depth, k=k)()
     opt = get_optimizer(opt_name, lr)
     model.compile(optimizer=opt, loss={'pred_age': 'mse', 'pred_gender': 'categorical_crossentropy'}, metrics={'pred_age': 'mae', 'pred_gender': 'accuracy'}, loss_weights={'pred_age': 10, 'pred_gender': 1})
 
@@ -111,13 +114,15 @@ def main():
 
     logging.debug("Running training...")
 
-    data_num = len(X_data)
+    data_num = len(image_list)
     indexes = np.arange(data_num)
     np.random.shuffle(indexes)
-    X_data = X_data[indexes]
+    X_data = image_list[indexes]
     y_data_g = y_data_g[indexes]
     y_data_a = y_data_a[indexes]
+
     train_num = int(data_num * (1 - validation_split))
+    test_num = int(data_num * validation_split)
     X_train = X_data[:train_num]
     X_test = X_data[train_num:]
     y_train_g = y_data_g[:train_num]
@@ -129,13 +134,14 @@ def main():
         datagen = ImageDataGenerator(
             width_shift_range=0.1,
             height_shift_range=0.1,
-            horizontal_flip=True,
-            preprocessing_function=get_random_eraser(v_l=0, v_h=255))
-        training_generator = MixupGenerator(X_train, [y_train_g, y_train_a], batch_size=batch_size, alpha=0.2,
-                                            datagen=datagen)()
+            horizontal_flip=True, preprocessing_function=get_random_eraser(v_l=0, v_h=255))
+        training_generator = MixupGenerator(X_train, [y_train_g, y_train_a], batch_size=batch_size, alpha=0.2, datagen=datagen)()
+        validation_generator = MixupGenerator(X_test, [y_test_g, y_test_a], batch_size=batch_size, alpha=0.2)()
+
         hist = model.fit_generator(generator=training_generator,
                                    steps_per_epoch=train_num // batch_size,
-                                   validation_data=(X_test, [y_test_g, y_test_a]),
+                                   validation_data=validation_generator,
+                                   validation_steps=test_num // batch_size,
                                    epochs=nb_epochs, verbose=1,
                                    callbacks=callbacks)
     else:
