@@ -12,7 +12,7 @@ from tensorflow.python.framework import graph_io
 
 k210_converter_path=os.path.join(os.path.dirname(__file__),"ncc","ncc")
 k210_converter_download_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),'ncc_linux_x86_64.tar.xz')
-nncase_download_url="https://github.com/kendryte/nncase/releases/download/v0.2.0-beta4/ncc_linux_x86_64.tar.xz"
+nncase_download_url="https://github.com/kendryte/nncase/releases/download/v0.2.0-beta2/ncc_linux_x86_64.tar.xz"
 cwd = os.path.dirname(os.path.realpath(__file__))
 
 class Converter(object):
@@ -66,7 +66,8 @@ class Converter(object):
         output_name = os.path.basename(model_path).split(".")[0]+".kmodel"
         output_path = os.path.join(os.path.dirname(model_path),output_name)
         print(output_path)
-        result = subprocess.run([k210_converter_path, "compile", model_path,output_path,"-i","tflite", "--dump-weights-range" ,"--dataset", dataset_path])
+        #result = subprocess.run([k210_converter_path, "compile", model_path,output_path,"-i","tflite", "--dump-weights-range", "--dataset", dataset_path])
+        result = subprocess.run([k210_converter_path, "compile", model_path,output_path,"-i","tflite", "--input-std", "0.5", "--input-mean", "0.5", "--dataset", dataset_path])
         print(result.returncode)
 
     def convert_onnx(self, model_path, model_layers):

@@ -36,7 +36,7 @@ class MixupGenerator():
         y_age_list = []
         for i in range(self.batch_size):
             img = cv2.imread(os.path.join("data", "imdb_crop", self.X_train[batch_ids[i]][0][0]), 1)
-            img = cv2.resize(img, (64, 64))
+            img = cv2.resize(img, (128, 128))
             img = img.astype(np.float32)
             img = img / 255.
             img = img - 0.5

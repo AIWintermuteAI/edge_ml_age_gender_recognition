@@ -55,8 +55,7 @@ def main():
 
         out_genders.append(int(gender[i]))
         out_ages.append(age[i])
-        out_imgs[valid_sample_num] = os.path.join("data/{}_crop/".format(db),full_path[i])
-        print(out_imgs[valid_sample_num])
+        out_imgs[valid_sample_num] = full_path[i]
         valid_sample_num += 1
 
     output = {"image": out_imgs[:valid_sample_num], "gender": np.array(out_genders), "age": np.array(out_ages),

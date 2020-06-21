@@ -15,17 +15,17 @@ import tensorflow as tf
 logging.basicConfig(level=logging.DEBUG)
 
 
-gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
-config = tf.ConfigProto(gpu_options=gpu_options)
-config.gpu_options.allow_growth = True
-session = tf.Session(config=config)
+#gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
+#config = tf.ConfigProto(gpu_options=gpu_options)
+#config.gpu_options.allow_growth = True
+#session = tf.Session(config=config)
 
 def get_args():
     parser = argparse.ArgumentParser(description="This script trains the CNN model for age and gender estimation.",
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--input", "-i", type=str, required=True,
                         help="path to input database mat file")
-    parser.add_argument("--batch_size", type=int, default=32,
+    parser.add_argument("--batch_size", type=int, default=16,
                         help="batch size")
     parser.add_argument("--nb_epochs", type=int, default=100,
                         help="number of epochs")
@@ -95,16 +95,17 @@ def main():
     logging.debug("Loading data...")
     image_list, gender, age, _, image_size, _ = load_data(input_path)
     y_data_g = np_utils.to_categorical(gender, 2)
-    y_data_a = age/np.max(age) #np_utils.to_categorical(age, 101)
+    y_data_a = np_utils.to_categorical(age, 101)
     model = _MobileNet(image_size, depth=depth, k=k)()
     opt = get_optimizer(opt_name, lr)
-    model.compile(optimizer=opt, loss={'pred_age': 'mse', 'pred_gender': 'categorical_crossentropy'}, metrics={'pred_age': 'mae', 'pred_gender': 'accuracy'}, loss_weights={'pred_age': 10, 'pred_gender': 1})
+    model.compile(optimizer=opt, loss={'pred_age': 'categorical_crossentropy', 'pred_gender': 'categorical_crossentropy'}, metrics={'pred_age': 'accuracy', 'pred_gender': 'accuracy'})
+    #model.compile(optimizer=opt, loss={'pred_age': 'mse', 'pred_gender': 'categorical_crossentropy'}, metrics={'pred_age': 'mae', 'pred_gender': 'accuracy'}, loss_weights={'pred_age': 0.25, 'pred_gender': 10})
 
     logging.debug("Model summary...")
     model.count_params()
     model.summary()
 
-    callbacks = [ReduceLROnPlateau(min_delta=0.000001),
+    callbacks = [ReduceLROnPlateau(min_delta=0.000001,monitor="val_loss",verbose=1,save_best_only=True,mode="auto"),
                  ModelCheckpoint(str(output_path) + "/weights.{epoch:02d}-{val_loss:.2f}.hdf5",
                                  monitor="val_loss",
                                  verbose=1,
