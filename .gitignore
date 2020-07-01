@@ -3,6 +3,9 @@
 data/
 checkpoints/ 
 samples/
+calibration/
+*.kmodel
+*.myarray
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

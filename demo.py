@@ -7,6 +7,15 @@ from contextlib import contextmanager
 from mobilenet import _MobileNet
 from keras.utils.data_utils import get_file
 
+import tensorflow as tf
+
+age_list=['0-10', '11-20', '21-45', '46-60', '60-100']
+
+gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
+config = tf.ConfigProto(gpu_options=gpu_options)
+config.gpu_options.allow_growth = True
+session = tf.Session(config=config)
+
 pretrained_model = "https://github.com/yu4u/age-gender-estimation/releases/download/v0.5/weights.28-3.73.hdf5"
 modhash = 'fbe63257a054c1c5466cfd7bf14646d6'
 
@@ -91,7 +100,7 @@ def main():
 
     # load model and weights
     img_size = 128
-    model = _MobileNet(img_size, depth=depth, k=k)()
+    model = _MobileNet(depth=depth)()
     model.load_weights(weight_file)
 
     image_generator = yield_images_from_dir(image_dir) if image_dir else yield_images()
@@ -114,21 +123,24 @@ def main():
                 cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 2)
                 # cv2.rectangle(img, (xw1, yw1), (xw2, yw2), (255, 0, 0), 2)
                 faces[i, :, :, :] = cv2.resize(img[yw1:yw2 + 1, xw1:xw2 + 1, :], (img_size, img_size))
-                faces[i, :, :, :] = faces[i, :, :, :] / 255.
-                faces[i, :, :, :] = faces[i, :, :, :] - 0.5
-                faces[i, :, :, :] = faces[i, :, :, :] * 2.
-            
+                #faces[i, :, :, :] = faces[i, :, :, :] / 255.
+                #faces[i, :, :, :] = faces[i, :, :, :] - 0.5
+                #faces[i, :, :, :] = faces[i, :, :, :] * 2.
+            for i in range(len(faces)):
+                faces[i] = faces[i] / 255.
+                faces[i]  = faces[i] - 0.5
+                faces[i]  = faces[i] * 2.
+                print(faces[i])
             # predict ages and genders of the detected faces
             results = model.predict(faces)
             predicted_genders = results[0]
             ages = np.arange(0, 101).reshape(101, 1)
-            #predicted_ages = results[1]
-            predicted_ages = results[1].dot(ages).flatten()
+            predicted_age = np.argmax(results[1])
+            #predicted_ages = results[1].dot(ages).flatten()
 
             # draw results
             for i, d in enumerate(detected):
-                label = "{}, {}".format(int(predicted_ages[i]),
-                                        "M" if predicted_genders[i][0] < 0.5 else "F")
+                label = "{}, {}".format(age_list[predicted_age], "M" if predicted_genders[i][0] < 0.5 else "F")
                 draw_label(img, (d.left(), d.top()), label)
 
         cv2.imshow("result", img)

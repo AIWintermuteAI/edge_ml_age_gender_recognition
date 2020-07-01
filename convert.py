@@ -44,17 +44,27 @@ class Converter(object):
         self._dataset_path=dataset_path
 
     def representative_dataset_gen(self):
-        num_imgs = 10
+        num_imgs = 5
+        image_files_list = []
+        #image_array = np.empty((num_imgs, 3, self._img_size[0],self._img_size[1]), dtype=np.float32)
+        #i = 0
         from axelerate.networks.common_utils.feature import create_feature_extractor
-        backend = create_feature_extractor(self._backend, 224)
-        image_files_list = glob.glob(self._dataset_path + '/**/*.jpg', recursive=True)
-        for filename in image_files_list[0:10]:
-            image = cv2.imread(filename)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            image = cv2.resize(image, (self._img_size, self._img_size))
-            data = np.array(backend.normalize(image), dtype=np.float32)
-            data = np.expand_dims(data, 0)
-        yield [data]
+        backend = create_feature_extractor(self._backend, [self._img_size[0], self._img_size[1]])
+        image_search = lambda ext : glob.glob(self._dataset_path + ext, recursive=True)
+        for ext in ['*.jpg', '*.jpeg', '*.png']: image_files_list.extend(image_search(ext))
+        with open("temp.bin", "ba+") as f:
+            for filename in image_files_list[:num_imgs]:
+                image = cv2.imread(filename)
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                image = cv2.resize(image, (self._img_size[0], self._img_size[1]))
+                data = np.array(backend.normalize(image), dtype=np.float32)
+                data = np.expand_dims(data, 0)
+                #if self._converter_type == 'edgetpu':
+                #    yield [out]
+                #else:
+                data = np.transpose(data, [0, 3, 1, 2])
+                data.tofile(f)
+
 
     def convert_edgetpu(self,model_path):
         output_path = os.path.dirname(model_path)
@@ -62,12 +72,13 @@ class Converter(object):
         result = subprocess.run(["edgetpu_compiler", "--out_dir", output_path, model_path])
         print(result.returncode)
 
-    def convert_k210(self,model_path,dataset_path):
+    def convert_k210(self, model_path, dataset_path):
+        #return_code = converter.representative_dataset_gen()
         output_name = os.path.basename(model_path).split(".")[0]+".kmodel"
         output_path = os.path.join(os.path.dirname(model_path),output_name)
         print(output_path)
-        #result = subprocess.run([k210_converter_path, "compile", model_path,output_path,"-i","tflite", "--dump-weights-range", "--dataset", dataset_path])
         result = subprocess.run([k210_converter_path, "compile", model_path,output_path,"-i","tflite", "--input-std", "0.5", "--input-mean", "0.5", "--dataset", dataset_path])
+        #result = subprocess.run([k210_converter_path, "compile", model_path,output_path,"-i","tflite", "--dataset-format", "raw", "--dataset", 'temp.bin'])
         print(result.returncode)
 
     def convert_onnx(self, model_path, model_layers):
@@ -121,6 +132,7 @@ class Converter(object):
     def convert_model(self, model_path, dataset_path=None):
         model = keras.models.load_model(model_path, compile=False)
         model_layers = model.layers
+        self._img_size = model.inputs[0].shape[1:3]
         model.save(model_path, overwrite=True, include_optimizer=False)
 
         if 'k210' in self._converter_type:
@@ -128,7 +140,6 @@ class Converter(object):
             self.convert_k210(model_path.split(".")[0] + '.tflite', dataset_path)
 
         if 'edgetpu' in self._converter_type:
-            self._img_size = model.inputs[0].shape[0:2]
             self.convert_tflite(model_path,model_layers, 'edgetpu')
             self.convert_edgetpu(model_path.split(".")[0] + '.tflite')
 
@@ -143,11 +154,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Keras model conversion to .kmodel, .tflite, or .onnx")
     parser.add_argument("--model_path", "-m", type=str, required=True,
                         help="path to keras model")
-    parser.add_argument("--converter_type", type=str, default='kmodel',
+    parser.add_argument("--converter_type", type=str, default='k210',
                         help="batch size")
     parser.add_argument("--dataset_path", type=str, required=False,
                         help="path to calibration dataset")
-    parser.add_argument("--backend", type=str, default='Mobilenet7_5',
+    parser.add_argument("--backend", type=str, default='MobileNet7_5',
                     help="network feature extractor, e.g. Mobilenet/YOLO/NASNet/etc")                    
     args = parser.parse_args()
     converter = Converter(args.converter_type, args.backend, args.dataset_path)

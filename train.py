@@ -1,4 +1,5 @@
 import pandas as pd
+import math
 import logging
 import argparse
 from pathlib import Path
@@ -15,10 +16,15 @@ import tensorflow as tf
 logging.basicConfig(level=logging.DEBUG)
 
 
-#gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
-#config = tf.ConfigProto(gpu_options=gpu_options)
-#config.gpu_options.allow_growth = True
-#session = tf.Session(config=config)
+gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
+config = tf.ConfigProto(gpu_options=gpu_options)
+config.gpu_options.allow_growth = True
+session = tf.Session(config=config)
+
+
+'''
+Suddenly, a WARNING from Allocator (GPU_0_bfc) line appeared on loginfo output in bash terminal. But seasoned ML scientist did not pay any attention to memory allocation warnings, as usual. Let the obsolete GPU just crunch matrices slower, what can you expect of it? A 1050TI is not even a ML graded graphics card, and tonight it’s going to have a very tough night. Since Dmitry started working with machine learning, every single one of his desktop GPU nights was like this, thus now its fan and heatsink has been damaged by endless nights of matrice multiplying that much that one could easily mistaken it for one of these "mining GPUs". 
+'''
 
 def get_args():
     parser = argparse.ArgumentParser(description="This script trains the CNN model for age and gender estimation.",
@@ -29,13 +35,13 @@ def get_args():
                         help="batch size")
     parser.add_argument("--nb_epochs", type=int, default=100,
                         help="number of epochs")
-    parser.add_argument("--lr", type=float, default=0.001,
+    parser.add_argument("--lr", type=float, default=0.0001,
                         help="initial learning rate")
     parser.add_argument("--opt", type=str, default="sgd",
                         help="optimizer name; 'sgd' or 'adam'")
     parser.add_argument("--depth", type=int, default=16,
                         help="depth of network (should be 10, 16, 22, 28, ...)")
-    parser.add_argument("--width", type=int, default=8,
+    parser.add_argument("--bottleneck_weights", type=str,
                         help="width of network")
     parser.add_argument("--validation_split", type=float, default=0.1,
                         help="validation split ratio")
@@ -70,13 +76,6 @@ def get_optimizer(opt_name, lr):
     else:
         raise ValueError("optimizer name should be 'sgd' or 'adam'")
 
-def normalize(image):
-    image = image / 255.
-    image = image - 0.5
-    image = image * 2.
-
-    return image
-
 
 def main():
     args = get_args()
@@ -86,17 +85,28 @@ def main():
     lr = args.lr
     opt_name = args.opt
     depth = args.depth
-    k = args.width
     validation_split = args.validation_split
     use_augmentation = args.aug
     output_path = Path(__file__).resolve().parent.joinpath(args.output_path)
     output_path.mkdir(parents=True, exist_ok=True)
 
     logging.debug("Loading data...")
-    image_list, gender, age, _, image_size, _ = load_data(input_path)
+    image_list, gender, age, _ ,  _ = load_data(input_path)
+    total = age.shape[0]
+    class_weights={'pred_gender': {0: 1, 1: 1}, 'pred_age': {0: 5, 1: 5, 2: 1, 3: 1, 4: 3}}
+    for i in range(5):
+        age_category_count = np.count_nonzero(age == i)
+        print(age_category_count)
+        class_weights['pred_age'][i] = math.ceil((1 / age_category_count)*(total)/5)
+
+
+    print(class_weights)
     y_data_g = np_utils.to_categorical(gender, 2)
-    y_data_a = np_utils.to_categorical(age, 101)
-    model = _MobileNet(image_size, depth=depth, k=k)()
+    y_data_a = np_utils.to_categorical(age, 5)
+    model = _MobileNet(depth=depth)()
+    if args.bottleneck_weights:
+        model.load_weights(args.bottleneck_weights,by_name=True)
+        print('Transfer learning mode')
     opt = get_optimizer(opt_name, lr)
     model.compile(optimizer=opt, loss={'pred_age': 'categorical_crossentropy', 'pred_gender': 'categorical_crossentropy'}, metrics={'pred_age': 'accuracy', 'pred_gender': 'accuracy'})
     #model.compile(optimizer=opt, loss={'pred_age': 'mse', 'pred_gender': 'categorical_crossentropy'}, metrics={'pred_age': 'mae', 'pred_gender': 'accuracy'}, loss_weights={'pred_age': 0.25, 'pred_gender': 10})
@@ -105,13 +115,12 @@ def main():
     model.count_params()
     model.summary()
 
-    callbacks = [ReduceLROnPlateau(min_delta=0.000001,monitor="val_loss",verbose=1,save_best_only=True,mode="auto"),
+    callbacks = [ReduceLROnPlateau(min_delta=0.000001,monitor="val_pred_age_accuracy",verbose=1, save_best_only=True,mode="auto"),
                  ModelCheckpoint(str(output_path) + "/weights.{epoch:02d}-{val_loss:.2f}.hdf5",
-                                 monitor="val_loss",
+                                 monitor="val_pred_age_accuracy",
                                  verbose=1,
                                  save_best_only=True,
-                                 mode="auto")
-                 ]
+                                 mode="auto")]
 
     logging.debug("Running training...")
 
@@ -144,7 +153,7 @@ def main():
                                    validation_data=validation_generator,
                                    validation_steps=test_num // batch_size,
                                    epochs=nb_epochs, verbose=1,
-                                   callbacks=callbacks)
+                                   callbacks=callbacks)#, class_weight=class_weights)
     else:
         hist = model.fit(X_train, [y_train_g, y_train_a], batch_size=batch_size, epochs=nb_epochs, callbacks=callbacks,
                          validation_data=(X_test, [y_test_g, y_test_a]))

@@ -29,7 +29,7 @@ def get_meta(mat_path, db):
 def load_data(mat_path):
     d = loadmat(mat_path)
 
-    return d["image"], d["gender"][0], d["age"][0], d["db"][0], d["img_size"][0, 0], d["min_score"][0, 0]
+    return d["image"], d["gender"][0], d["age"][0], d["db"][0], d["min_score"][0, 0]
 
 
 def mk_dir(dir):
