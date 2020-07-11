@@ -108,7 +108,7 @@ class Converter(object):
                f.write(model_proto.SerializeToString())
         #sess.close()
 
-    def convert_tflite(self, model_path, model_layers, target=None):
+    def convert_tflite(self, model_path, model, model_layers, target=None):
         yolo = 'reshape_1' in model_layers[-1].name
         if yolo and target=='k210': 
             print("Converting to tflite without Reshape layer for K210 Yolo")
@@ -125,7 +125,9 @@ class Converter(object):
             tflite_quant_model = converter.convert()
 
         else:
-            converter = tf.lite.TFLiteConverter.from_keras_model_file(model_path)
+            converter = tf.lite.TFLiteConverter.from_keras_model(model)
+            converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS, tf.lite.OpsSet.SELECT_TF_OPS]
+
         tflite_model = converter.convert()
         open(os.path.join (model_path.split(".")[0] + '.tflite'), "wb").write(tflite_model)
 
@@ -133,7 +135,7 @@ class Converter(object):
         model = keras.models.load_model(model_path, compile=False)
         model_layers = model.layers
         self._img_size = model.inputs[0].shape[1:3]
-        model.save(model_path, overwrite=True, include_optimizer=False)
+        #model.save(model_path, overwrite=True, include_optimizer=False)
 
         if 'k210' in self._converter_type:
             self.convert_tflite(model_path, model_layers, 'k210')
@@ -148,7 +150,7 @@ class Converter(object):
             self.convert_onnx(model_path, model_layers)
 
         if 'tflite' in self._converter_type:
-            self.convert_tflite(model_path,model_layers)
+            self.convert_tflite(model_path, model, model_layers)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Keras model conversion to .kmodel, .tflite, or .onnx")

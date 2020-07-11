@@ -14,17 +14,14 @@ from mixup_generator import MixupGenerator
 from random_eraser import get_random_eraser
 import tensorflow as tf
 logging.basicConfig(level=logging.DEBUG)
-
+from datetime import datetime
+import os
 
 gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
 config = tf.ConfigProto(gpu_options=gpu_options)
 config.gpu_options.allow_growth = True
 session = tf.Session(config=config)
 
-
-'''
-Suddenly, a WARNING from Allocator (GPU_0_bfc) line appeared on loginfo output in bash terminal. But seasoned ML scientist did not pay any attention to memory allocation warnings, as usual. Let the obsolete GPU just crunch matrices slower, what can you expect of it? A 1050TI is not even a ML graded graphics card, and tonight it’s going to have a very tough night. Since Dmitry started working with machine learning, every single one of his desktop GPU nights was like this, thus now its fan and heatsink has been damaged by endless nights of matrice multiplying that much that one could easily mistaken it for one of these "mining GPUs". 
-'''
 
 def get_args():
     parser = argparse.ArgumentParser(description="This script trains the CNN model for age and gender estimation.",
@@ -47,7 +44,7 @@ def get_args():
                         help="validation split ratio")
     parser.add_argument("--aug", action="store_true",
                         help="use data augmentation if set true")
-    parser.add_argument("--output_path", type=str, default="checkpoints",
+    parser.add_argument("--output_path", type=str, default=os.path.join("checkpoints", datetime.now().strftime('%Y-%m-%d_%H-%M-%S')),
                         help="checkpoint dir")
     args = parser.parse_args()
     return args
@@ -89,7 +86,7 @@ def main():
     use_augmentation = args.aug
     output_path = Path(__file__).resolve().parent.joinpath(args.output_path)
     output_path.mkdir(parents=True, exist_ok=True)
-
+    print(output_path)
     logging.debug("Loading data...")
     image_list, gender, age, _ ,  _ = load_data(input_path)
     total = age.shape[0]
@@ -144,6 +141,7 @@ def main():
         datagen = ImageDataGenerator(
             width_shift_range=0.1,
             height_shift_range=0.1,
+            brightness_range=[0.7,1.3],
             horizontal_flip=True, preprocessing_function=get_random_eraser(v_l=0, v_h=255))
         training_generator = MixupGenerator(X_train, [y_train_g, y_train_a], batch_size=batch_size, alpha=0.2, datagen=datagen)()
         validation_generator = MixupGenerator(X_test, [y_test_g, y_test_a], batch_size=batch_size, alpha=0.2)()

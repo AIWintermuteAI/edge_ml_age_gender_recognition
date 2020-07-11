@@ -30,6 +30,12 @@ class MixupGenerator():
 
         return indexes
 
+    def save_img(self, path, age, img):
+        #img = img.astype(np.int8)
+        filename = os.path.join("data", "imdb_processed", str(age)+"_"+os.path.basename(path))
+        #print(filename)
+        cv2.imwrite(filename, img)
+
     def __data_generation(self, batch_ids):
         X = []
         y_gender_list = []
@@ -37,18 +43,29 @@ class MixupGenerator():
         for i in range(self.batch_size):
             img = cv2.imread(os.path.join("data", "imdb_crop", self.X_train[batch_ids[i]][0][0]), 1)
             img = cv2.resize(img, (128, 128))
-            img = img.astype(np.float32)
-            img = img / 255.
-            img = img - 0.5
-            img = img * 2.
-            img = img[:, :, ::-1]
             if self.datagen:
                 img = self.datagen.random_transform(img)
                 img = self.datagen.standardize(img)
-            X.append(img)
+            img_to_save = img
+
+            img = img.astype(np.float32)
+            img /= 255.
+            img -= 0.5
+            img *= 2.
+            img = img[:, :, ::-1]
+
+            #output_image = img[:, :, ::-1]
+            #output_image /= 255.
+            #output_image += 0.5
+            #output_image *= 255.
+
+            X.append(img) 
             
             y_gender = self.y_train[0][batch_ids[i]]
             y_age = self.y_train[1][batch_ids[i]]
+
+            self.save_img(self.X_train[batch_ids[i]][0][0], np.argmax(y_age), img_to_save)
+
             y_gender_list.append(y_gender)
             y_age_list.append(y_age)
         
