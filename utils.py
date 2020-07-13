@@ -1,7 +1,7 @@
 from scipy.io import loadmat
 from datetime import datetime
 import os
-
+import pandas as pd
 
 def calc_age(taken, dob):
     birth = datetime.fromordinal(max(int(dob) - 366, 1))
@@ -11,6 +11,35 @@ def calc_age(taken, dob):
         return taken - birth.year
     else:
         return taken - birth.year - 1
+
+
+def age_to_groups(age):
+
+    if age > 0 and age <= 10:
+        age = 0
+
+    elif age > 10 and age <= 20:
+        age = 1
+
+    elif age > 20 and age <= 45:
+        age = 2
+
+    elif age > 45 and age <= 60:
+        age = 3
+
+    elif age > 60:
+        age = 4
+
+    return age
+
+def gender_to_groups(gender):
+
+    if gender == 'female':
+        gender = 1
+    else:
+        gender = 0
+
+    return gender
 
 
 def get_meta(mat_path, db):
@@ -26,10 +55,21 @@ def get_meta(mat_path, db):
     return full_path, dob, gender, photo_taken, face_score, second_face_score, age
 
 
-def load_data(mat_path):
-    d = loadmat(mat_path)
+def load_data(path, _format):
 
-    return d["image"], d["gender"][0], d["age"][0], d["db"][0], d["min_score"][0, 0]
+    if _format == "mat":
+        d = loadmat(path)
+        return d["image"], d["gender"][0], d["age"][0], d["db"][0], d["min_score"][0, 0]
+    elif _format == "csv":
+        d = pd.read_csv(path)
+        
+        for i, age in d.iterrows():
+            d.at[i, 'age'] = age_to_groups(d.at[i, 'age'])
+            
+        for i, gender in d.iterrows():
+            d.at[i, 'gender'] = gender_to_groups(d.at[i, 'gender'])
+            
+        return d["file"].to_numpy(), d["gender"].to_numpy(), d["age"].to_numpy(), d["race"].to_numpy(), d["happiness"].to_numpy()
 
 
 def mk_dir(dir):
