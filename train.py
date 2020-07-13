@@ -22,7 +22,6 @@ config = tf.ConfigProto(gpu_options=gpu_options)
 config.gpu_options.allow_growth = True
 session = tf.Session(config=config)
 
-
 def get_args():
     parser = argparse.ArgumentParser(description="This script trains the CNN model for age and gender estimation.",
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -39,7 +38,7 @@ def get_args():
     parser.add_argument("--depth", type=int, default=16,
                         help="depth of network (should be 10, 16, 22, 28, ...)")
     parser.add_argument("--bottleneck_weights", type=str,
-                        help="width of network")
+                        help="bottleneck_weights")
     parser.add_argument("--validation_split", type=float, default=0.1,
                         help="validation split ratio")
     parser.add_argument("--aug", action="store_true",
@@ -77,6 +76,7 @@ def get_optimizer(opt_name, lr):
 def main():
     args = get_args()
     input_path = args.input
+    _format = input_path.split(".")[1]
     batch_size = args.batch_size
     nb_epochs = args.nb_epochs
     lr = args.lr
@@ -88,7 +88,8 @@ def main():
     output_path.mkdir(parents=True, exist_ok=True)
     print(output_path)
     logging.debug("Loading data...")
-    image_list, gender, age, _ ,  _ = load_data(input_path)
+    image_list, gender, age, _ ,  _ = load_data(input_path, _format)
+    print(image_list, gender, age)
     total = age.shape[0]
     class_weights={'pred_gender': {0: 1, 1: 1}, 'pred_age': {0: 5, 1: 5, 2: 1, 3: 1, 4: 3}}
     for i in range(5):
