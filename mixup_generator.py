@@ -2,11 +2,11 @@ import numpy as np
 import cv2
 import os 
 class MixupGenerator():
-    def __init__(self, X_train, y_train, batch_size=32, alpha=0.2, shuffle=True, datagen=None):
+    def __init__(self, X_train, y_train, batch_size=32, prefix='appa-real/imgs/', shuffle=True, datagen=None):
         self.X_train = X_train
         self.y_train = y_train
         self.batch_size = batch_size
-        self.alpha = alpha
+        self.prefix = prefix
         self.shuffle = shuffle
         self.sample_num = len(X_train)
         self.datagen = datagen
@@ -41,13 +41,13 @@ class MixupGenerator():
         y_gender_list = []
         y_age_list = []
         for i in range(self.batch_size):
-            img = cv2.imread(os.path.join("appa-real", "imgs", self.X_train[batch_ids[i]]), 1)
-            #print(os.path.join("appa-real", "imgs", self.X_train[batch_ids[i]]))
+            img = cv2.imread(self.prefix + self.X_train[batch_ids[i]], 1)
+            #print(self.prefix + self.X_train[batch_ids[i]])
             img = cv2.resize(img, (128, 128))
             if self.datagen:
                 img = self.datagen.random_transform(img)
                 img = self.datagen.standardize(img)
-            img_to_save = img
+            #img_to_save = img
 
             img = img.astype(np.float32)
             img /= 255.
@@ -65,7 +65,7 @@ class MixupGenerator():
             y_gender = self.y_train[0][batch_ids[i]]
             y_age = self.y_train[1][batch_ids[i]]
 
-            self.save_img(self.X_train[batch_ids[i]][0][0], np.argmax(y_age), img_to_save)
+            #self.save_img(self.X_train[batch_ids[i]][0][0], np.argmax(y_age), img_to_save)
 
             y_gender_list.append(y_gender)
             y_age_list.append(y_age)

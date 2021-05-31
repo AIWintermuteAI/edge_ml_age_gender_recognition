@@ -35,9 +35,9 @@ def age_to_groups(age):
 def gender_to_groups(gender):
 
     if gender == 'female':
-        gender = 1
-    else:
         gender = 0
+    else:
+        gender = 1
 
     return gender
 
@@ -59,7 +59,8 @@ def load_data(path, _format):
 
     if _format == "mat":
         d = loadmat(path)
-        return d["image"], d["gender"][0], d["age"][0], d["db"][0], d["min_score"][0, 0]
+        return d["image"], d["gender"][0], d["age"][0]
+
     elif _format == "csv":
         d = pd.read_csv(path)
         
@@ -69,7 +70,7 @@ def load_data(path, _format):
         for i, gender in d.iterrows():
             d.at[i, 'gender'] = gender_to_groups(d.at[i, 'gender'])
             
-        return d["file"].to_numpy(), d["gender"].to_numpy(), d["age"].to_numpy(), d["race"].to_numpy(), d["happiness"].to_numpy()
+        return d["file"].to_numpy(), d["gender"].to_numpy(), d["age"].to_numpy()
 
 
 def mk_dir(dir):

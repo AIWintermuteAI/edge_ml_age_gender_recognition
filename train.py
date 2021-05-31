@@ -88,17 +88,19 @@ def main():
     output_path.mkdir(parents=True, exist_ok=True)
     print(output_path)
     logging.debug("Loading data...")
-    image_list, gender, age, _ ,  _ = load_data(input_path, _format)
-    print(image_list, gender, age)
+    image_list, gender, age = load_data(input_path, _format)
+
+    valid_image_list, valid_gender, valid_age = load_data('appa-real/valid.csv', _format)
+
     total = age.shape[0]
     class_weights={'pred_gender': {0: 1, 1: 1}, 'pred_age': {0: 5, 1: 5, 2: 1, 3: 1, 4: 3}}
+
     for i in range(5):
         age_category_count = np.count_nonzero(age == i)
         print(age_category_count)
         class_weights['pred_age'][i] = math.ceil((1 / age_category_count)*(total)/5)
-
-
     print(class_weights)
+
     y_data_g = np_utils.to_categorical(gender, 2)
     y_data_a = np_utils.to_categorical(age, 5)
     model = _MobileNet(depth=depth)()
@@ -107,7 +109,6 @@ def main():
         print('Transfer learning mode')
     opt = get_optimizer(opt_name, lr)
     model.compile(optimizer=opt, loss={'pred_age': 'categorical_crossentropy', 'pred_gender': 'categorical_crossentropy'}, metrics={'pred_age': 'accuracy', 'pred_gender': 'accuracy'})
-    #model.compile(optimizer=opt, loss={'pred_age': 'mse', 'pred_gender': 'categorical_crossentropy'}, metrics={'pred_age': 'mae', 'pred_gender': 'accuracy'}, loss_weights={'pred_age': 0.25, 'pred_gender': 10})
 
     logging.debug("Model summary...")
     model.count_params()
@@ -129,14 +130,15 @@ def main():
     y_data_g = y_data_g[indexes]
     y_data_a = y_data_a[indexes]
 
-    train_num = int(data_num * (1 - validation_split))
-    test_num = int(data_num * validation_split)
-    X_train = X_data[:train_num]
-    X_test = X_data[train_num:]
-    y_train_g = y_data_g[:train_num]
-    y_test_g = y_data_g[train_num:]
-    y_train_a = y_data_a[:train_num]
-    y_test_a = y_data_a[train_num:]
+    train_num = len(image_list)
+    test_num = len(valid_image_list)
+    X_train = X_data
+    y_train_g = y_data_g
+    y_train_a = y_data_a
+
+    X_test = valid_image_list
+    y_test_g = np_utils.to_categorical(valid_gender, 2)
+    y_test_a = np_utils.to_categorical(valid_age, 5)
 
     if use_augmentation:
         datagen = ImageDataGenerator(
@@ -144,15 +146,15 @@ def main():
             height_shift_range=0.1,
             brightness_range=[0.7,1.3],
             horizontal_flip=True, preprocessing_function=get_random_eraser(v_l=0, v_h=255))
-        training_generator = MixupGenerator(X_train, [y_train_g, y_train_a], batch_size=batch_size, alpha=0.2, datagen=datagen)()
-        validation_generator = MixupGenerator(X_test, [y_test_g, y_test_a], batch_size=batch_size, alpha=0.2)()
+        training_generator = MixupGenerator(X_train, [y_train_g, y_train_a], batch_size=batch_size, prefix='appa-real/imgs/', datagen=datagen)()
+        validation_generator = MixupGenerator(X_test, [y_test_g, y_test_a], batch_size=batch_size, prefix='appa-real/imgs_validation/')()
 
         hist = model.fit_generator(generator=training_generator,
                                    steps_per_epoch=train_num // batch_size,
                                    validation_data=validation_generator,
                                    validation_steps=test_num // batch_size,
                                    epochs=nb_epochs, verbose=1,
-                                   callbacks=callbacks)#, class_weight=class_weights)
+                                   callbacks=callbacks, class_weight=class_weights)
     else:
         hist = model.fit(X_train, [y_train_g, y_train_a], batch_size=batch_size, epochs=nb_epochs, callbacks=callbacks,
                          validation_data=(X_test, [y_test_g, y_test_a]))

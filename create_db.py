@@ -5,7 +5,7 @@ import argparse
 import os
 from tqdm import tqdm
 from utils import get_meta
-
+import pandas as pd
 
 def get_args():
     parser = argparse.ArgumentParser(description="This script cleans-up noisy labels "
@@ -36,7 +36,8 @@ def main():
     out_genders = []
     out_ages = []
     sample_num = len(face_score)
-    out_imgs = np.memmap('filename.myarray', dtype='object', mode='w+', shape=(7685, 1))
+    out_imgs = []
+    #out_imgs = np.memmap('filename.myarray', dtype='object', mode='w+', shape=(7685, 1))
     valid_sample_num = 0
     age_counters = [0 for i in range(5)]
     females, males = 0, 0
@@ -54,27 +55,27 @@ def main():
             continue
 
         if age[i] > 0 and age[i] <= 10:
-            age[i] = 0
+            #age[i] = 0
             age_counters[0] += 1
             if age_counters[0] >= 1281: continue
 
         elif age[i] > 10 and age[i] <= 20:
-            age[i] = 1
+            #age[i] = 1
             age_counters[1] += 1
             if age_counters[1] >= 1281: continue
 
         elif age[i] > 20 and age[i] <= 45:
-            age[i] = 2
+            #age[i] = 2
             age_counters[2] += 1
             if age_counters[2] >= 1281: continue
 
         elif age[i] > 45 and age[i] <= 60:
-            age[i] = 3
+            #age[i] = 3
             age_counters[3] += 1
             if age_counters[3] >= 1281: continue
 
         elif age[i] > 60:
-            age[i] = 4
+            #age[i] = 4
             if gender[i] == 0: females += 1
             if gender[i] == 1: males += 1
             age_counters[4] += 1
@@ -91,13 +92,15 @@ def main():
 
         out_genders.append(int(gender[i]))
         out_ages.append(age[i])
-        out_imgs[valid_sample_num] = full_path[i]
+        out_imgs.append(full_path[i][0])
         valid_sample_num += 1
 
     print(females, males)
-    output = {"image": out_imgs[:valid_sample_num], "gender": np.array(out_genders), "age": np.array(out_ages),
+    output = {"image": out_imgs, "gender": out_genders, "age": out_ages,
               "db": db, "min_score": min_score}
-    scipy.io.savemat(output_path, output)
+    df = pd.DataFrame.from_dict(output)
+    df.to_csv(output_path, index = False)
+    #scipy.io.savemat(output_path, output)
 
 
 if __name__ == '__main__':

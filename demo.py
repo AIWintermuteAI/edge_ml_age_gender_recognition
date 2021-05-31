@@ -16,9 +16,6 @@ config = tf.ConfigProto(gpu_options=gpu_options)
 config.gpu_options.allow_growth = True
 session = tf.Session(config=config)
 
-pretrained_model = "https://github.com/yu4u/age-gender-estimation/releases/download/v0.5/weights.28-3.73.hdf5"
-modhash = 'fbe63257a054c1c5466cfd7bf14646d6'
-
 
 def get_args():
     parser = argparse.ArgumentParser(description="This script detects faces from web cam input, "
@@ -91,10 +88,6 @@ def main():
     margin = args.margin
     image_dir = args.image_dir
 
-    if not weight_file:
-        weight_file = get_file("weights.28-3.73.hdf5", pretrained_model, cache_subdir="pretrained_models",
-                               file_hash=modhash, cache_dir=str(Path(__file__).resolve().parent))
-
     # for face detection
     detector = dlib.get_frontal_face_detector()
 
@@ -120,8 +113,8 @@ def main():
                 yw1 = max(int(y1 - margin * h), 0)
                 xw2 = min(int(x2 + margin * w), img_w - 1)
                 yw2 = min(int(y2 + margin * h), img_h - 1)
-                cv2.rectangle(img, (xw1, yw1), (xw2, yw2), (255, 0, 0), 2)
-                # cv2.rectangle(img, (xw1, yw1), (xw2, yw2), (255, 0, 0), 2)
+                #cv2.rectangle(img, (xw1, yw1), (xw2, yw2), (255, 0, 0), 2)
+                cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 2)
                 faces[i, :, :, :] = cv2.resize(img[yw1:yw2 + 1, xw1:xw2 + 1, :], (img_size, img_size))
                 #faces[i, :, :, :] = faces[i, :, :, :] / 255.
                 #faces[i, :, :, :] = faces[i, :, :, :] - 0.5
@@ -130,7 +123,7 @@ def main():
                 faces[i] = faces[i] / 255.
                 faces[i]  = faces[i] - 0.5
                 faces[i]  = faces[i] * 2.
-                print(faces[i])
+                #print(faces[i])
             # predict ages and genders of the detected faces
             results = model.predict(faces)
             predicted_genders = results[0]
