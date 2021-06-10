@@ -1,0 +1,4 @@
+{
+    "python.pythonPath": "/home/ubuntu/miniconda3/envs/tf/bin/python",
+    "jupyter.jupyterServerType": "local"
+}

@@ -2,18 +2,13 @@
 mkdir -p data
 cd data
 
-if [ ! -f imdb_crop.tar ]; then
-    wget https://data.vision.ee.ethz.ch/cvl/rrothe/imdb-wiki/static/imdb_crop.tar
+echo "Downloading processed Appareal and UTKFace datasets - the datasets ownership belongs to their respective authors. Consult README for license information and links."
+
+if [ ! -f processed_data.zip ]; then
+    wget https://files.seeedstudio.com//ml/processed_data.zip
 fi
 
-if [ ! -d imdb_crop ]; then
-    tar xf imdb_crop.tar
+if [ ! -d processed_data ]; then
+    unzip processed_data.zip
 fi
 
-if [ ! -f wiki_crop.tar ]; then
-    wget https://data.vision.ee.ethz.ch/cvl/rrothe/imdb-wiki/static/wiki_crop.tar
-fi
-
-if [ ! -d wiki_crop ]; then
-    tar xf wiki_crop.tar
-fi

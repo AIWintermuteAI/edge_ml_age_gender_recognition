@@ -1,7 +1,6 @@
-opencv-python
-cmake
+tensorflow>=2.3.0,<2.5.0
+opencv-python~=4.5
+numpy
 dlib
-imutils
-Pandas
+pandas
 tqdm
-tables

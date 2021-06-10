@@ -1,5 +1,5 @@
 import tensorflow as tf
-import keras
+import tensorflow.keras.backend as k
 import subprocess
 import os
 import cv2
@@ -8,13 +8,22 @@ import tarfile
 import glob
 import shutil
 import numpy as np
-from tensorflow.python.framework import graph_util
-from tensorflow.python.framework import graph_io
+import shlex
 
 k210_converter_path=os.path.join(os.path.dirname(__file__),"ncc","ncc")
 k210_converter_download_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),'ncc_linux_x86_64.tar.xz')
-nncase_download_url="https://github.com/kendryte/nncase/releases/download/v0.2.0-beta2/ncc_linux_x86_64.tar.xz"
+nncase_download_url="https://github.com/kendryte/nncase/releases/download/v0.2.0-beta4/ncc_linux_x86_64.tar.xz"
 cwd = os.path.dirname(os.path.realpath(__file__))
+
+def run_command(cmd, cwd=None):
+    with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, executable='/bin/bash', universal_newlines=True, cwd=cwd) as p:
+        while True:
+            line = p.stdout.readline()
+            if not line:
+                break
+            print(line)    
+        exit_code = p.poll()
+    return exit_code
 
 class Converter(object):
     def __init__(self, converter_type, backend=None, dataset_path=None):
@@ -26,7 +35,7 @@ class Converter(object):
                 print('K210 Converter ready')
             else:
                 print('Downloading K210 Converter')
-                _path = keras.utils.get_file(k210_converter_download_path, nncase_download_url)     
+                _path = tf.keras.utils.get_file(k210_converter_download_path, nncase_download_url)     
                 print(_path)    
                 tar_file = tarfile.open(k210_converter_download_path)
                 tar_file.extractall(os.path.join(os.path.dirname(__file__),"ncc"))
@@ -39,13 +48,34 @@ class Converter(object):
                 print('Edge TPU Converter ready')
             else:
                 print('Installing Edge TPU Converter')
-                subprocess.Popen(['bash install_edge_tpu_compiler.sh'], shell=True, stdin=subprocess.PIPE, cwd=cwd).communicate()
+                cmd = "bash install_edge_tpu_compiler.sh"
+                result = run_command(cmd, cwd)
+                print(result)
+                
+        if 'openvino' in converter_type:
+            rc = os.path.isdir('/opt/intel/openvino')
+            if rc:
+                print('OpenVINO Converter ready')
+            else:
+                print('Installing OpenVINO Converter')
+                cmd = "bash install_openvino.sh"
+                result = run_command(cmd, cwd)
+                print(result)       
+                
+        if 'onnx' in converter_type:
+            try:
+                import tf2onnx
+            except:
+                cmd = "pip install tf2onnx"
+                result = run_command(cmd, cwd)
+                print(result)              
+                
         self._converter_type = converter_type
         self._backend = backend
         self._dataset_path=dataset_path
 
     def edgetpu_dataset_gen(self):
-        num_imgs = None
+        num_imgs = 300
         image_files_list = []
         from axelerate.networks.common_utils.feature import create_feature_extractor
         backend = create_feature_extractor(self._backend, [self._img_size[0], self._img_size[1]])
@@ -61,7 +91,7 @@ class Converter(object):
             yield [data]
 
     def k210_dataset_gen(self):
-        num_imgs = None
+        num_imgs = 300
         image_files_list = []
         from axelerate.networks.common_utils.feature import create_feature_extractor
         backend = create_feature_extractor(self._backend, [self._img_size[0], self._img_size[1]])
@@ -69,7 +99,6 @@ class Converter(object):
         for ext in ['/**/*.jpg', '/**/*.jpeg', '/**/*.png']: image_files_list.extend(image_search(ext))
         temp_folder = os.path.join(os.path.dirname(__file__),'tmp')
         os.mkdir(temp_folder)
-        print(image_files_list)
         for filename in image_files_list[:num_imgs]:
             image = cv2.imread(filename)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -77,7 +106,7 @@ class Converter(object):
             data = np.array(backend.normalize(image), dtype=np.float32)
             data = np.expand_dims(data, 0)
             bin_filename = os.path.basename(filename).split('.')[0]+'.bin'
-            with open(os.path.join(temp_folder, bin_filename), "ba+") as f:
+            with open(os.path.join(temp_folder, bin_filename), "wb") as f: 
                 data = np.transpose(data, [0, 3, 1, 2])
                 data.tofile(f)
         return temp_folder
@@ -85,86 +114,106 @@ class Converter(object):
     def convert_edgetpu(self, model_path):
         output_path = os.path.dirname(model_path)
         print(output_path)
-        result = subprocess.run(["edgetpu_compiler", "--out_dir", output_path, model_path])
-        print(result.returncode)
+        cmd = "edgetpu_compiler --out_dir {} {}".format(output_path, model_path)
+        print(cmd)
+        result = run_command(cmd)
+        print(result)
 
     def convert_k210(self, model_path):
         folder_name = self.k210_dataset_gen()
         output_name = os.path.basename(model_path).split(".")[0]+".kmodel"
         output_path = os.path.join(os.path.dirname(model_path),output_name)
         print(output_path)
-        result = subprocess.run([k210_converter_path, "compile", model_path,output_path,"-i","tflite", "--dataset-format", "raw", "--dataset", folder_name])
+        cmd = '{} compile "{}" "{}" -i tflite --weights-quantize-threshold 1000 --dataset-format raw --dataset "{}"'.format(k210_converter_path, model_path, output_path, folder_name)
+        print(cmd)
+        result = run_command(cmd)
         shutil.rmtree(folder_name, ignore_errors=True)
-        print(result.returncode)
+        print(result)
 
-    def convert_onnx(self, model_path, model_layers):
-        import keras.backend as k
-        k.clear_session()
-        k.set_learning_phase(0)
+    def convert_ir(self, model_path, model_layers):
+        input_model = os.path.join(model_path.split(".")[0], "saved_model.pb")
+        output_dir = os.path.dirname(model_path)
+        output_layer = model_layers[-2].name+'/BiasAdd'
+        cmd = 'source /opt/intel/openvino/bin/setupvars.sh && python3 /opt/intel/openvino/deployment_tools/model_optimizer/mo.py --input_model "{}" --output {} --batch 1 --reverse_input_channels --data_type FP16 --mean_values [127.5,127.5,127.5] --scale_values [127.5] --output_dir "{}"'.format(input_model, output_layer, output_dir)
+        print(cmd)
+        result = run_command(cmd)
+        print(result)
 
-        model = keras.models.load_model(model_path, compile=False)
-        input_node_names = model.layers[0].get_output_at(0).name.split(':')[0]
-        output_node_names = [model.layers[-1].get_output_at(0).name.split(':')[0]]
-        sess = k.get_session()
+    def convert_oak(self, model_path):
+        output_name = model_path.split(".")[0]+".blob"
+        cmd = 'source /opt/intel/openvino/bin/setupvars.sh && /opt/intel/openvino/deployment_tools/inference_engine/lib/intel64/myriad_compile -m "{}" -o "{}" -ip U8 -VPU_MYRIAD_PLATFORM VPU_MYRIAD_2480 -VPU_NUMBER_OF_SHAVES 4 -VPU_NUMBER_OF_CMX_SLICES 4'.format(model_path.split(".")[0] + '.xml', output_name)
+        print(cmd)
+        result = run_command(cmd)
+        print(result)
 
-        # The TensorFlow freeze_graph expects a comma-separated string of output node names.
-        input_node_names_onnx= [model.layers[0].get_output_at(0).name]
-        output_node_names_onnx = [model.layers[-1].get_output_at(0).name]
-        print(output_node_names_onnx)
-        print(input_node_names_onnx)
-        frozen_graph_def = tf.graph_util.convert_variables_to_constants(sess, sess.graph_def, output_node_names)
+    def convert_onnx(self, model):
+        spec = (tf.TensorSpec((None, *self._img_size, 3), tf.float32, name="input"),)
+        output_path = self.model_path.split(".")[0] + '.onnx'
+        model_proto, external_tensor_storage = tf2onnx.convert.from_keras(model, input_signature=spec, output_path = output_path)
 
-        tf.reset_default_graph()
-        with tf.Graph().as_default() as tf_graph:
-            tf.import_graph_def(frozen_graph_def, name='')
+    def convert_tflite(self, model, model_layers, target=None):
+        model_type = model.name
 
-            onnx_graph = tf2onnx.tfonnx.process_tf_graph(tf_graph, input_names=input_node_names_onnx, output_names=output_node_names_onnx)
-            model_proto = onnx_graph.make_model("model")
-            with open(model_path.split(".")[0] + '.onnx', "wb") as f:
-               f.write(model_proto.SerializeToString())
-        #sess.close()
-
-    def convert_tflite(self, model_path, model_layers, target=None):
-        yolo = 'reshape_1' in model_layers[-1].name
-        if yolo and target=='k210': 
-            print("Converting to tflite without Reshape layer for K210 Yolo")
-            output_layer = model_layers[-2].name+'/BiasAdd'
-            converter = tf.lite.TFLiteConverter.from_keras_model_file(model_path, output_arrays=[output_layer])
+        if target=='k210': 
+            if model_type == 'yolo':
+                print("Converting to tflite without Reshape for K210 YOLO")
+                model = tf.keras.Model(inputs=model.input, outputs=model.layers[-2].output)
+            if model_type == 'segnet':   
+                print("Converting to tflite with old converter for K210 Segnet")
+                converter = tf.lite.TFLiteConverter.from_keras_model(model)
+                converter.experimental_new_converter = False
+            else:
+                converter = tf.lite.TFLiteConverter.from_keras_model(model)
 
         elif target == 'edgetpu':
-            converter = tf.lite.TFLiteConverter.from_keras_model_file(model_path)
+            converter = tf.lite.TFLiteConverter.from_keras_model(model)
             converter.optimizations = [tf.lite.Optimize.DEFAULT]
             converter.representative_dataset = self.edgetpu_dataset_gen
             converter.target_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
             converter.inference_input_type = tf.uint8
             converter.inference_output_type = tf.uint8
 
+        elif target == 'tflite_dynamic':
+            converter = tf.lite.TFLiteConverter.from_keras_model(model)
+            converter.optimizations = [tf.lite.Optimize.DEFAULT]
+            
+        elif target == 'tflite_fullint':
+            converter = tf.lite.TFLiteConverter.from_keras_model(model)
+            converter.optimizations = [tf.lite.Optimize.DEFAULT]            
+            converter.representative_dataset = self.edgetpu_dataset_gen
+            
         else:
-            converter = tf.lite.TFLiteConverter.from_keras_model_file(model_path)
+            converter = tf.lite.TFLiteConverter.from_keras_model(model)
 
         tflite_model = converter.convert()
-        open(os.path.join (model_path.split(".")[0] + '.tflite'), "wb").write(tflite_model)
+        open(os.path.join (self.model_path.split(".")[0] + '.tflite'), "wb").write(tflite_model)
 
     def convert_model(self, model_path):
-        model = keras.models.load_model(model_path, compile=False)
+        k.clear_session()
+        k.set_learning_phase(0)
+        model = tf.keras.models.load_model(model_path, compile=False)
         model_layers = model.layers
-        self._img_size = model.inputs[0].shape[1:3]
-        model.save(model_path, overwrite=True, include_optimizer=False)
+        self._img_size = model.input_shape[1:3]
+        self.model_path = os.path.abspath(model_path)
 
         if 'k210' in self._converter_type:
-            self.convert_tflite(model_path, model_layers, 'k210')
-            self.convert_k210(model_path.split(".")[0] + '.tflite')
+            self.convert_tflite(model, model_layers, 'k210')
+            self.convert_k210(self.model_path.split(".")[0] + '.tflite')
 
         if 'edgetpu' in self._converter_type:
-            self.convert_tflite(model_path,model_layers, 'edgetpu')
+            self.convert_tflite(model, model_layers, 'edgetpu')
             self.convert_edgetpu(model_path.split(".")[0] + '.tflite')
 
         if 'onnx' in self._converter_type:
-            import tf2onnx
-            self.convert_onnx(model_path, model_layers)
+            self.convert_onnx(model)
+            
+        if 'openvino' in self._converter_type:
+            model.save(model_path.split(".")[0])
+            self.convert_ir(model_path, model_layers)
+            self.convert_oak(model_path)
 
         if 'tflite' in self._converter_type:
-            self.convert_tflite(model_path,model_layers)
+            self.convert_tflite(model, model_layers, self._converter_type)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Keras model conversion to .kmodel, .tflite, or .onnx")
