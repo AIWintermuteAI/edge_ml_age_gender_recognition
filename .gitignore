@@ -111,6 +111,6 @@ ENV/
 /.idea/
 
 /data/
-/models/
 /checkpoints/
 .DS_Store
+.vscode

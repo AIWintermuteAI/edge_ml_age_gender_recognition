@@ -55,10 +55,11 @@ def process_image_classification(image, desired_w = None, desired_h = None, aug_
 
 
 class DataGenerator():
-    def __init__(self, X_train, y_train, batch_size=32, prefix='appa-real/imgs/', shuffle=True, augment=None):
+    def __init__(self, X_train, y_train, batch_size=32, img_size = 128, prefix='appa-real/imgs/', shuffle=True, augment=None):
         self.X_train = X_train
         self.y_train = y_train
         self.batch_size = batch_size
+        self.img_size = img_size
         self.prefix = prefix
         self.age_num = y_train[1].shape[1]
 
@@ -92,7 +93,7 @@ class DataGenerator():
         cv2.imwrite(filename, img)
 
     def __data_generation(self, batch_ids):
-        X = np.zeros(shape=(self.batch_size, 128, 128, 3))
+        X = np.zeros(shape=(self.batch_size, self.img_size, self.img_size, 3))
         y_gender_list = np.zeros(shape=(self.batch_size, 2))
         y_age_list = np.zeros(shape=(self.batch_size, self.age_num))
 
@@ -101,7 +102,7 @@ class DataGenerator():
 
             try:
                 if self.augment:
-                    img = process_image_classification(image = img, aug_pipe = self.aug_pipe)
+                    img = process_image_classification(img, self.img_size, self.img_size, self.aug_pipe)
             except Exception as e:
                 print(self.prefix + self.X_train[batch_ids[i]], e)
 

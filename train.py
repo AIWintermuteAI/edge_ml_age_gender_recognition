@@ -31,6 +31,8 @@ def get_args():
                         help="path to validation database csv file")                        
     parser.add_argument("--batch_size", type=int, default=32,
                         help="batch size")
+    parser.add_argument("--img_size", type=int, default=128,
+                        help="image size")                        
     parser.add_argument("--nb_epochs", type=int, default=50,
                         help="number of epochs")
     parser.add_argument("--lr", type=float, default=1e-3,
@@ -70,15 +72,23 @@ def get_model(img_size, alpha, num_age = 5, depth_multiplier=1, model_type= 'Mob
 
     if model_type == 'MobileNet':
 
-        mobilenet = MobileNet(input_shape=(128,128,3), input_tensor=input_image, alpha = alpha, weights = weights, 
-                            include_top=False,
+        input_shapes_imagenet = [(128, 128,3), (160, 160,3), (192, 192,3), (224, 224,3)]
+        input_shape = (128,128,3)
+        for item in input_shapes_imagenet:
+            if item[0] <= img_size[0]:
+                input_shape = item
+
+        mobilenet = MobileNet(input_shape=input_shape, input_tensor=input_image, 
+                            alpha = alpha, weights = weights, 
+                            include_top = False, depth_multiplier = depth_multiplier,
                             backend=tf.keras.backend, layers=tf.keras.layers, 
                             models=tf.keras.models, utils=tf.keras.utils)
         x = GlobalAveragePooling2D()(mobilenet.outputs[0])
 
     elif model_type == 'MobileFaceNet':
 
-            x = mobile_face_base(input_shape=(128,128,3), input_tensor=input_image, alpha = alpha, weights = weights, 
+            x = mobile_face_base(input_shape=(img_size, img_size, 3), input_tensor=input_image, 
+                            alpha = alpha, weights = weights, 
                             backend=tf.keras.backend, layers=tf.keras.layers, 
                             models=tf.keras.models, utils=tf.keras.utils)
             x = Flatten()(x)
@@ -114,6 +124,7 @@ def main():
     model_type = args.model_type
     batch_size = args.batch_size
     nb_epochs = args.nb_epochs
+    img_size = args.img_size
     lr = args.lr
     opt_name = args.opt
     alpha = args.alpha
@@ -158,7 +169,7 @@ def main():
     if checkpoint:
         model = load_model(checkpoint)
     else:
-        model = get_model(img_size=128, alpha=alpha, num_age = num_ages,
+        model = get_model(img_size=img_size, alpha=alpha, num_age = num_ages,
                                 depth_multiplier=1, model_type= model_type,
                                 weights = args.bottleneck_weights)
 
@@ -179,8 +190,10 @@ def main():
 
     logging.debug("Running training...")
         
-    training_generator = DataGenerator(X_train, [y_train_g, y_train_a], batch_size=batch_size, prefix='data/processed_data/train/', augment = use_augmentation)()
-    validation_generator = DataGenerator(X_test, [y_test_g, y_test_a], batch_size=batch_size, prefix='data/processed_data/valid/')()
+    training_generator = DataGenerator(X_train, [y_train_g, y_train_a], batch_size=batch_size, 
+                                        img_size = img_size, prefix='data/processed_data/train/', augment = use_augmentation)()
+    validation_generator = DataGenerator(X_test, [y_test_g, y_test_a], batch_size=batch_size, 
+                                        img_size = img_size, prefix='data/processed_data/valid/')()
 
     model.fit_generator(generator=training_generator,
                         steps_per_epoch=train_num // batch_size,
